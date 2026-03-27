@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Cloud Records</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 8px 15px; cursor: pointer; border-radius: 4px; border: none; color: white; }
+        .btn-add { background: #28a745; }
+        .btn-search { background: #007bff; }
+        .btn-delete { background: #dc3545; padding: 4px 8px; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+        th { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Add New Student</h2>
+        <input type="text" id="sId" placeholder="ID (STU001)">
+        <input type="text" id="sName" placeholder="Name">
+        <input type="text" id="sEmail" placeholder="Email">
+        <button class="btn-add" onclick="addStudent()">Add to Cloud</button>
+    </div>
+
+    <div class="card">
+        <h2>Records Explorer</h2>
+        <input type="text" id="searchInput" onkeyup="liveSearch()" placeholder="Live search by name...">
+        <button class="btn-search" onclick="fetchAll()">Reload All Data</button>
+        <p id="countBadge">Total: 0</p>
+        <div id="loading" style="display:none; color: blue; font-weight: bold; margin: 10px 0;">
+    Please wait, fetching cloud records...
+</div>
+        
+        <table id="studentTable">
+            <thead>
+                <tr><th>ID</th><th>Name</th><th>Email</th><th>Action</th></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_URL = "https://lcf04ohac3.execute-api.us-east-1.amazonaws.com/prod/student"; 
+
+        // CREATE: Add student
+       async function addStudent() {
+    const student_id = document.getElementById('sId').value;
+    const name = document.getElementById('sName').value;
+    const email = document.getElementById('sEmail').value;
+
+    // Validation
+    if (!student_id || !name) {
+        return alert("Please enter at least an ID and Name.");
+    }
+
+    const studentData = {
+        student_id: student_id,
+        name: name,
+        email: email
+    };
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST', // This triggers the 'elif method == POST' in your Lambda
+            body: JSON.stringify(studentData),
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            alert("Student added successfully!");
+            // Clear the boxes
+            document.getElementById('sId').value = "";
+            document.getElementById('sName').value = "";
+            document.getElementById('sEmail').value = "";
+            // Refresh the table to see the new student
+            fetchAll(); 
+        } else {
+            alert("Error adding student. Check console.");
+        }
+    } catch (err) {
+        console.error("Network Error:", err);
+        alert("Could not connect to AWS.");
+    }
+}
+       // REPLACE your old fetchAll with this:
+async function fetchAll() {
+    // 1. Show the blue message
+    document.getElementById('loading').style.display = "block"; 
+    
+    try {
+        const response = await fetch(API_URL);
+        const students = await response.json();
+        
+        // 2. Send data to the display function
+        display(students);
+    } catch (error) {
+        console.error("Error fetching data:", error);
+        alert("Failed to load records from AWS.");
+    } finally {
+        // 3. Hide the message whether it worked or failed
+        document.getElementById('loading').style.display = "none"; 
+    }
+}
+        async function deleteStudent(id) {
+            if(confirm("Delete " + id + "?")) {
+                await fetch(`${API_URL}?id=${id}`, { method: 'DELETE' });
+                fetchAll();
+            }
+        }
+
+        function display(data) {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = "";
+
+    // Check if data is actually an array/list
+    if (!Array.isArray(data)) {
+        console.error("Expected an array but got:", data);
+        tbody.innerHTML = "<tr><td colspan='4'>Error: Cloud returned invalid data format.</td></tr>";
+        return;
+    }
+
+    if (data.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='4'>No records found.</td></tr>";
+        return;
+    }
+
+    tbody.innerHTML = data.map(s => `
+        <tr>
+            <td>${s.student_id || 'N/A'}</td>
+            <td>${s.name || 'N/A'}</td>
+            <td>${s.email || 'N/A'}</td>
+            <td><button class="btn-delete" onclick="deleteStudent('${s.student_id}')">Delete</button></td>
+        </tr>
+    `).join('');
+    
+    document.getElementById('countBadge').innerText = "Total: " + data.length;
+}
+        // IMPROVISATION: Live Filter
+        function liveSearch() {
+            let filter = document.getElementById('searchInput').value.toUpperCase();
+            let tr = document.getElementById('studentTable').getElementsByTagName('tr');
+            for (let i = 1; i < tr.length; i++) {
+                let txt = tr[i].textContent || tr[i].innerText;
+                tr[i].style.display = txt.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+            }
+        }
+    </script>
+</body>
+</html>
